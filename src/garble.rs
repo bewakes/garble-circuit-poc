@@ -3,7 +3,6 @@ use std::{
     fmt,
     hash::{DefaultHasher, Hash, Hasher},
     iter::successors,
-    marker::PhantomData,
 };
 
 use crate::gate::{Bit, Gate};
@@ -43,6 +42,9 @@ pub trait Garbled {
     type SymmetricKey; // for password
     type Encrypted: Hash + Clone;
 
+    fn master_secret(&self) -> Self::Secret;
+    fn gate(&self) -> &impl Gate;
+
     fn concat(p1: Self::Encrypted, p2: Self::Encrypted) -> Self::Encrypted;
     fn hash(p: &impl Hash) -> Self::Hash;
     fn encrypt_with(psswd: Self::Secret, output: Bit) -> Self::Encrypted;
@@ -51,18 +53,15 @@ pub trait Garbled {
     // Generate secrets from secret
     fn gen_pwds<'a>(sec: Self::Secret) -> impl Iterator<Item = Self::Secret>;
 
-    fn compute_garble_table(
-        secret: Self::Secret,
-        gate: &impl Gate,
-    ) -> GarbledTable<Self::Hash, Self::Encrypted> {
-        let pwds: Vec<Self::Secret> = Self::gen_pwds(secret).take(12).collect();
+    fn compute_garble_table(&self) -> GarbledTable<Self::Hash, Self::Encrypted> {
+        let pwds: Vec<Self::Secret> = Self::gen_pwds(self.master_secret()).take(12).collect();
         assert!(pwds.len() == 12);
 
         let concat_hash = |(p1, p2): (Self::Encrypted, Self::Encrypted)| {
             let c = Self::concat(p1, p2);
             Self::hash(&c)
         };
-        let table = gate.table();
+        let table = self.gate().table();
         let mut input_hash_map = HashMap::new();
         let mut input_enc_map = HashMap::new();
         let mut hash_out_map = HashMap::new();
@@ -94,16 +93,34 @@ pub trait Garbled {
 
 #[derive(Debug, Clone)]
 pub struct SimpleGarbledGate<G: Gate> {
+    /// master secret
+    master_secret: u64,
     /// The gate that is garbled
-    gate: PhantomData<G>,
+    gate: G,
 }
 
+impl<G: Gate> SimpleGarbledGate<G> {
+    pub fn new(master_secret: u64, gate: G) -> Self {
+        Self {
+            master_secret,
+            gate,
+        }
+    }
+}
 
 impl<G: Gate> Garbled for SimpleGarbledGate<G> {
     type Secret = u64;
     type Hash = u64;
     type SymmetricKey = u64;
     type Encrypted = u64;
+
+    fn master_secret(&self) -> Self::Secret {
+        self.master_secret
+    }
+
+    fn gate(&self) -> &impl Gate {
+        &self.gate
+    }
 
     fn hash(v: &impl Hash) -> u64 {
         let mut hasher = DefaultHasher::new();
