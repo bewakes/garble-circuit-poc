@@ -128,14 +128,14 @@ impl<G: Gate> Garbled for SimpleGarbledGate<G> {
         hasher.finish()
     }
     // A very basic encrypt
-    fn encrypt_with(p: u64, pout: Bit) -> u64 {
+    fn encrypt_with(secret: Self::Secret, pout: Bit) -> u64 {
         let pout: u64 = pout.into();
-        p + pout
+        secret + pout
     }
 
     // A very basic decrypt
-    fn decrypt_with(value: u64, p: u64) -> Bit {
-        (value - p).into()
+    fn decrypt_with(secret: Self::Secret, value: u64) -> Bit {
+        (value - secret).into()
     }
 
     fn concat(p1: Self::Secret, p2: Self::Secret) -> Self::Secret {
@@ -156,20 +156,23 @@ pub struct GarbledTable<H: Hash, E> {
     pub hash_out_map: HashMap<H, Bit>,
 }
 
+#[derive(Clone, Debug)]
+pub struct PartialAppliedGarbledTable<H, E> {
+    pub msgs_sorted: Vec<(E, E)>,
+    pub hash_outputs: HashMap<H, Bit>,
+}
+
 impl<H: Clone + Eq + Hash, E: Clone> GarbledTable<H, E> {
-    /// Returns the sub table whose first input is inp
-    pub fn get_table_for_input(&self, inp: Bit) -> HashMap<H, Bit> {
-        let tb: Vec<_> = self
-            .input_hash_map
-            .iter()
-            .filter_map(|(i, h)| {
-                if i.0 == inp {
-                    self.hash_out_map.get(h).map(|x| (h.clone(), x.clone()))
-                } else {
-                    None
-                }
-            })
-            .collect();
-        HashMap::from_iter(tb)
+    pub fn get_partial_applied_table(&self, inp: Bit) -> PartialAppliedGarbledTable<H, E> {
+        let mut inps: Vec<_> = self.input_hash_map.keys().filter(|&x| x.0 == inp).collect();
+        inps.sort_by_key(|i| i.1.clone());
+
+        PartialAppliedGarbledTable {
+            msgs_sorted: inps
+                .iter()
+                .map(|i| self.input_enc_map.get(i).unwrap().clone())
+                .collect(),
+            hash_outputs: self.hash_out_map.clone(),
+        }
     }
 }

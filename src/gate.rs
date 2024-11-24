@@ -1,6 +1,6 @@
 use std::{fmt, hash::Hash};
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Bit {
     Zero,
     One,
