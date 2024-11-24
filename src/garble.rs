@@ -158,7 +158,7 @@ pub struct GarbledTable<H: Hash, E> {
 
 #[derive(Clone, Debug)]
 pub struct PartialAppliedGarbledTable<H, E> {
-    pub msgs_sorted: Vec<(E, E)>,
+    pub inps_sorted: Vec<(E, E)>,
     pub hash_outputs: HashMap<H, Bit>,
 }
 
@@ -168,7 +168,7 @@ impl<H: Clone + Eq + Hash, E: Clone> GarbledTable<H, E> {
         inps.sort_by_key(|i| i.1.clone());
 
         PartialAppliedGarbledTable {
-            msgs_sorted: inps
+            inps_sorted: inps
                 .iter()
                 .map(|i| self.input_enc_map.get(i).unwrap().clone())
                 .collect(),
