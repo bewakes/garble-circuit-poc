@@ -7,23 +7,21 @@ use std::{
 
 use crate::gate::{Bit, Gate};
 
-impl<H: Hash + fmt::Display + fmt::Debug, E: fmt::Display + fmt::Debug> fmt::Display
-    for GarbledTable<H, E>
+impl<H, E, const I: usize> fmt::Display for GarbledTable<H, E, I>
+where
+    H: Hash + fmt::Display + fmt::Debug,
+    E: fmt::Display + fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Format input_enc_map
         writeln!(f, "Input-Encoding by symmetric encryption :")?;
-        for ((input1, input2), (enc1, enc2)) in &self.input_enc_map {
-            writeln!(
-                f,
-                "({:?}, {:?}) -> ({:?}, {:?})",
-                input1, input2, enc1, enc2
-            )?;
+        for (input, (enc1, enc2)) in &self.input_enc_map {
+            writeln!(f, "{:?} -> ({:?}, {:?})", input, enc1, enc2)?;
         }
         // Format input_hash_map
         writeln!(f, "\nHashes for corresponding inputs:")?;
-        for ((input1, input2), hash) in &self.input_hash_map {
-            writeln!(f, "({:?}, {:?}) -> {:?}", input1, input2, hash)?;
+        for (input, hash) in &self.input_hash_map {
+            writeln!(f, "{:?} -> {:?}", input, hash)?;
         }
 
         // Format hash_out_map
@@ -36,14 +34,17 @@ impl<H: Hash + fmt::Display + fmt::Debug, E: fmt::Display + fmt::Debug> fmt::Dis
     }
 }
 
-pub trait Garbled {
+pub trait Garbled<const I: usize>
+where
+    [(); 1 << I]:,
+{
     type Secret: Hash + Clone;
     type Hash: Hash + Eq + Clone;
     type SymmetricKey; // for password
     type Encrypted: Hash + Clone;
 
     fn master_secret(&self) -> Self::Secret;
-    fn gate(&self) -> &impl Gate;
+    fn gate(&self) -> &Gate<I>;
 
     fn concat(p1: Self::Encrypted, p2: Self::Encrypted) -> Self::Encrypted;
     fn hash(p: &impl Hash) -> Self::Hash;
@@ -53,7 +54,7 @@ pub trait Garbled {
     // Generate secrets from secret
     fn gen_pwds<'a>(sec: Self::Secret) -> impl Iterator<Item = Self::Secret>;
 
-    fn compute_garble_table(&self) -> GarbledTable<Self::Hash, Self::Encrypted> {
+    fn compute_garble_table(&self) -> GarbledTable<Self::Hash, Self::Encrypted, I> {
         let pwds: Vec<Self::Secret> = Self::gen_pwds(self.master_secret()).take(12).collect();
         assert!(pwds.len() == 12);
 
@@ -69,8 +70,8 @@ pub trait Garbled {
         for (i, (inp, out)) in table.iter().enumerate() {
             // Encrypt inputs and output
             let encrypted_inputs = (
-                Self::encrypt_with(pwds[i * 3].clone(), inp.0.clone()),
-                Self::encrypt_with(pwds[i * 3 + 1].clone(), inp.1.clone()),
+                Self::encrypt_with(pwds[i * 3].clone(), inp[0]),
+                Self::encrypt_with(pwds[i * 3 + 1].clone(), inp[1]),
             );
             // let encrypted_output = Self::encrypt_with(pwds[i * 3 + 2].clone(), out.clone());
 
@@ -78,9 +79,9 @@ pub trait Garbled {
             let input_hash = concat_hash(encrypted_inputs.clone());
 
             // Populate maps
-            input_hash_map.insert(inp.clone(), input_hash.clone());
-            input_enc_map.insert(inp.clone(), encrypted_inputs);
-            hash_out_map.insert(input_hash, out.clone());
+            input_hash_map.insert(*inp, input_hash.clone());
+            input_enc_map.insert(*inp, encrypted_inputs);
+            hash_out_map.insert(input_hash, *out);
         }
 
         GarbledTable {
@@ -91,16 +92,22 @@ pub trait Garbled {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct SimpleGarbledGate<G: Gate> {
+// #[derive(Debug, Clone)]
+pub struct SimpleGarbledGate<const I: usize>
+where
+    [(); 1 << I]:,
+{
     /// master secret
     master_secret: u64,
     /// The gate that is garbled
-    gate: G,
+    gate: Gate<I>,
 }
 
-impl<G: Gate> SimpleGarbledGate<G> {
-    pub fn new(master_secret: u64, gate: G) -> Self {
+impl<const I: usize> SimpleGarbledGate<I>
+where
+    [(); 1 << I]:,
+{
+    pub fn new(master_secret: u64, gate: Gate<I>) -> Self {
         Self {
             master_secret,
             gate,
@@ -108,7 +115,10 @@ impl<G: Gate> SimpleGarbledGate<G> {
     }
 }
 
-impl<G: Gate> Garbled for SimpleGarbledGate<G> {
+impl<const I: usize> Garbled<I> for SimpleGarbledGate<I>
+where
+    [(); 1 << I]:,
+{
     type Secret = u64;
     type Hash = u64;
     type SymmetricKey = u64;
@@ -118,7 +128,7 @@ impl<G: Gate> Garbled for SimpleGarbledGate<G> {
         self.master_secret
     }
 
-    fn gate(&self) -> &impl Gate {
+    fn gate(&self) -> &Gate<I> {
         &self.gate
     }
 
@@ -150,9 +160,9 @@ impl<G: Gate> Garbled for SimpleGarbledGate<G> {
 }
 
 #[derive(Clone, Debug)]
-pub struct GarbledTable<H: Hash, E> {
-    pub input_hash_map: HashMap<(Bit, Bit), H>,
-    pub input_enc_map: HashMap<(Bit, Bit), (E, E)>,
+pub struct GarbledTable<H: Hash, E, const I: usize> {
+    pub input_hash_map: HashMap<[Bit; I], H>,
+    pub input_enc_map: HashMap<[Bit; I], (E, E)>,
     pub hash_out_map: HashMap<H, Bit>,
 }
 
@@ -162,15 +172,20 @@ pub struct PartialAppliedGarbledTable<H, E> {
     pub hash_outputs: HashMap<H, Bit>,
 }
 
-impl<H: Clone + Eq + Hash, E: Clone> GarbledTable<H, E> {
+impl<H: Clone + Eq + Hash, E: Clone, const I: usize> GarbledTable<H, E, I> {
+    // TODO: make this generic
     pub fn get_partial_applied_table(&self, inp: Bit) -> PartialAppliedGarbledTable<H, E> {
-        let mut inps: Vec<_> = self.input_hash_map.keys().filter(|&x| x.0 == inp).collect();
-        inps.sort_by_key(|i| i.1.clone());
+        let mut inps: Vec<_> = self
+            .input_hash_map
+            .keys()
+            .filter(|&x| x[0] == inp)
+            .collect();
+        inps.sort_by_key(|i| i[1]);
 
         PartialAppliedGarbledTable {
             inps_sorted: inps
                 .iter()
-                .map(|i| self.input_enc_map.get(i).unwrap().clone())
+                .map(|&i| self.input_enc_map.get(i).unwrap().clone())
                 .collect(),
             hash_outputs: self.hash_out_map.clone(),
         }

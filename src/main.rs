@@ -1,9 +1,10 @@
+#![feature(generic_const_exprs)]
 use std::io;
 
 use garbled_circuits::{
     encryption::{EncryptionScheme, SimpleEncryptionScheme},
     garble::{Garbled, SimpleGarbledGate},
-    gate::{Bit, NandGate},
+    gate::{Bit, ANDGATE},
 };
 
 fn pause() {
@@ -17,12 +18,11 @@ fn pause() {
 fn main() {
     let alice_secret = 42;
     let bob_secret = 24;
-    let nand = NandGate;
 
     println!(
         "\n\n\nAlice and Bob each have a bit and want to to compute the result of ANDing their bits"
     );
-    println!("{:?}\n", nand);
+    // println!("{:?}\n", ANDGATE);
     println!("However, they do not want to share their bits with each other.");
     println!();
     println!(
@@ -30,7 +30,7 @@ fn main() {
     );
     println!("For each input and output bits, Alice encrypts them with keys generated from here secret key.\n");
 
-    let garbled_nand = SimpleGarbledGate::new(alice_secret, nand);
+    let garbled_nand = SimpleGarbledGate::new(alice_secret, ANDGATE);
     let garbled_and_table = garbled_nand.compute_garble_table();
 
     println!("The garbled table now looks like this:");
@@ -82,7 +82,7 @@ fn main() {
     pause();
 
     let bob_bit = Bit::One;
-    let index: u64 = bob_bit.clone().into();
+    let index: u64 = bob_bit.into();
     println!(
         "Bob's bit is {:?} which corresponds to {}th password",
         bob_bit, index
@@ -117,8 +117,8 @@ fn main() {
     pause();
 
     let concatenated =
-        <SimpleGarbledGate<NandGate> as Garbled>::concat(bob_decrypted.0, bob_decrypted.1);
-    let hash = <SimpleGarbledGate<NandGate> as Garbled>::hash(&concatenated);
+        <SimpleGarbledGate<2> as Garbled<2>>::concat(bob_decrypted.0, bob_decrypted.1);
+    let hash = <SimpleGarbledGate<2> as Garbled<2>>::hash(&concatenated);
     println!("Bob hashes the password to get {:?} which is the key to the garble table he received before.", hash);
     println!(
         "Bob uses the hash to get the result: {:?}",
