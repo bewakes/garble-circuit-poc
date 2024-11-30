@@ -5,7 +5,10 @@ use std::{
     iter::successors,
 };
 
-use crate::gate::{Bit, Gate};
+use crate::{
+    bit::Bit,
+    gate::{BitArray, Gate},
+};
 
 impl<H, E, const I: usize> fmt::Display for GarbledTable<H, E, I>
 where
@@ -68,8 +71,10 @@ where
         let mut input_enc_map = HashMap::new();
         let mut hash_out_map = HashMap::new();
 
-        for (i, (inp, out)) in table.iter().enumerate() {
+        for (i, &out) in table.iter().enumerate() {
             // Encrypt inputs and output
+            let outbit: Bit = out.into();
+            let inp: BitArray<I> = i.into();
             let encrypted_inputs = (
                 Self::encrypt_with(pwds[i * 3].clone(), inp[0]),
                 Self::encrypt_with(pwds[i * 3 + 1].clone(), inp[1]),
@@ -82,7 +87,7 @@ where
             // Populate maps
             input_hash_map.insert(*inp, input_hash.clone());
             input_enc_map.insert(*inp, encrypted_inputs);
-            hash_out_map.insert(input_hash, *out);
+            hash_out_map.insert(input_hash, outbit);
         }
 
         GarbledTable {

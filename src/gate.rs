@@ -1,46 +1,21 @@
-use std::{fmt, hash::Hash};
+use std::{fmt, ops::Deref};
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub enum Bit {
-    Zero,
-    One,
-}
+use crate::bit::Bit;
 
-impl fmt::Display for Bit {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Bit::Zero => write!(f, "0"),
-            Bit::One => write!(f, "1"),
-        }
-    }
-}
-
-impl From<u64> for Bit {
-    fn from(v: u64) -> Self {
-        if v == 0 {
-            Self::Zero
-        } else {
-            Self::One
-        }
-    }
-}
-
-impl From<Bit> for u64 {
-    fn from(val: Bit) -> Self {
-        match val {
-            Bit::Zero => 0,
-            Bit::One => 1,
-        }
-    }
-}
-
-struct BitArray<const I: usize> {
+pub struct BitArray<const I: usize> {
     inner: [Bit; I],
 }
 
 impl<const I: usize> BitArray<I> {
     pub fn new(inner: [Bit; I]) -> Self {
         Self { inner }
+    }
+}
+
+impl<const I: usize> Deref for BitArray<I> {
+    type Target = [Bit; I];
+    fn deref(&self) -> &Self::Target {
+        &self.inner
     }
 }
 
@@ -69,8 +44,7 @@ impl<const I: usize> From<BitArray<I>> for usize {
     }
 }
 
-// TODO: we won't even need to store the inputs, the inputs can just be array index
-pub type Table<const I: usize> = [([Bit; I], Bit); 1 << I];
+pub type Table<const I: usize> = [bool; 1 << I];
 
 pub struct Gate<const I: usize>
 where
@@ -83,18 +57,22 @@ impl<const I: usize> Gate<I>
 where
     [(); 1 << I]:,
 {
-    pub fn from_table(mut table: [([Bit; I], Bit); 1 << I]) -> Self {
-        // Ensure sorted, TODO: use sorted array
-        table.sort_by(|a, b| a.0.cmp(&b.0));
+    pub fn from_table(mut raw_table: [([Bit; I], Bit); 1 << I]) -> Self {
+        raw_table.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut table = [false; 1 << I];
+        table.copy_from_slice(
+            &raw_table
+                .iter()
+                .map(|&(_, bit)| bool::from(bit))
+                .collect::<Vec<_>>(),
+        );
         Self { table }
     }
 
     pub fn evaluate(&self, input: &[Bit; I]) -> Bit {
-        let idx = self
-            .table
-            .binary_search_by(|(i, _)| i.cmp(input))
-            .expect("Table does not have input");
-        self.table[idx].1
+        let index: usize = BitArray::new(*input).into();
+        let val = self.table[index];
+        val.into()
     }
 
     pub fn table(&self) -> &Table<I> {
@@ -109,8 +87,10 @@ where
     [(); 1 << I]:,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for (input, output) in self.table.iter() {
-            let input_str = input
+        for (i, output) in self.table.iter().enumerate() {
+            let bitarr: BitArray<I> = i.into();
+            let input_str = bitarr
+                .inner
                 .iter()
                 .map(|x| x.to_string())
                 .collect::<Vec<_>>()
@@ -122,39 +102,19 @@ where
 }
 
 pub const ANDGATE: Gate<2> = Gate {
-    table: [
-        ([Bit::Zero, Bit::Zero], Bit::Zero),
-        ([Bit::Zero, Bit::One], Bit::Zero),
-        ([Bit::One, Bit::Zero], Bit::Zero),
-        ([Bit::One, Bit::One], Bit::One),
-    ],
+    table: [false, false, false, true],
 };
 
 pub const ORGATE: Gate<2> = Gate {
-    table: [
-        ([Bit::Zero, Bit::Zero], Bit::Zero),
-        ([Bit::Zero, Bit::One], Bit::One),
-        ([Bit::One, Bit::Zero], Bit::One),
-        ([Bit::One, Bit::One], Bit::One),
-    ],
+    table: [false, true, true, true],
 };
 
 pub const XORGATE: Gate<2> = Gate {
-    table: [
-        ([Bit::Zero, Bit::Zero], Bit::Zero),
-        ([Bit::Zero, Bit::One], Bit::One),
-        ([Bit::One, Bit::Zero], Bit::One),
-        ([Bit::One, Bit::One], Bit::Zero),
-    ],
+    table: [false, true, true, false],
 };
 
 pub const NANDGATE: Gate<2> = Gate {
-    table: [
-        ([Bit::Zero, Bit::Zero], Bit::One),
-        ([Bit::Zero, Bit::One], Bit::One),
-        ([Bit::One, Bit::Zero], Bit::One),
-        ([Bit::One, Bit::One], Bit::Zero),
-    ],
+    table: [true, true, true, false],
 };
 
 #[cfg(test)]
@@ -188,5 +148,15 @@ mod test {
             BitArray::new([Bit::One, Bit::Zero, Bit::One, Bit::Zero, Bit::One, Bit::One]); // Binary: 101011
         let num: usize = bit_array.into();
         assert_eq!(num, 43);
+    }
+
+    #[test]
+    fn to_and_from() {
+        const BITS: usize = 15;
+        for i in 0usize..1 << BITS {
+            let barr: BitArray<BITS> = i.into();
+            let res: usize = barr.into();
+            assert_eq!(i, res);
+        }
     }
 }

@@ -2,9 +2,10 @@
 use std::io;
 
 use garbled_circuits::{
+    bit::Bit,
     encryption::{EncryptionScheme, SimpleEncryptionScheme},
     garble::{Garbled, SimpleGarbledGate},
-    gate::{Bit, ANDGATE},
+    gate::ANDGATE,
 };
 
 fn pause() {
