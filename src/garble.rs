@@ -54,6 +54,7 @@ where
     // Generate secrets from secret
     fn gen_pwds<'a>(sec: Self::Secret) -> impl Iterator<Item = Self::Secret>;
 
+    // TODO: make this generic
     fn compute_garble_table(&self) -> GarbledTable<Self::Hash, Self::Encrypted, I> {
         let pwds: Vec<Self::Secret> = Self::gen_pwds(self.master_secret()).take(12).collect();
         assert!(pwds.len() == 12);

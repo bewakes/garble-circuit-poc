@@ -69,6 +69,7 @@ impl<const I: usize> From<BitArray<I>> for usize {
     }
 }
 
+// TODO: we won't even need to store the inputs, the inputs can just be array index
 pub type Table<const I: usize> = [([Bit; I], Bit); 1 << I];
 
 pub struct Gate<const I: usize>
