@@ -46,6 +46,7 @@ impl<const I: usize> From<BitArray<I>> for usize {
 
 pub type Table<const I: usize> = [bool; 1 << I];
 
+#[derive(Clone, Debug)]
 pub struct Gate<const I: usize>
 where
     [(); 1 << I]:,
